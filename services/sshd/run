@@ -1,0 +1,5 @@
+#!/bin/sh
+exec 2>&1
+mkdir -p /run/sshd && chmod 0755 /run/sshd
+mkdir -p /home/dev/.ssh && chown dev:dev /home/dev/.ssh && chmod 700 /home/dev/.ssh
+exec /usr/sbin/sshd -D -e 

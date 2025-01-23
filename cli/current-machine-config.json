@@ -1,0 +1,25 @@
+{
+  "init": {},
+  "guest": {
+    "cpu_kind": "shared",
+    "cpus": 1,
+    "memory_mb": 256
+  },
+  "image": "registry.fly.io/fly-dev-env:deployment-01JJ7Q0YZMVCMEJA3RKP5WT6V0",
+  "restart": {
+    "policy": "on-failure",
+    "max_retries": 10
+  },
+  "containers": [
+    {
+      "name": "app",
+      "image": "registry.fly.io/fly-dev-env:deployment-01JJ7Q0YZMVCMEJA3RKP5WT6V0",
+      "env": {
+        "S6_CMD_WAIT_FOR_SERVICES": "1",
+        "S6_CMD_WAIT_FOR_SERVICES_MAXTIME": "0",
+        "S6_KILL_GRACETIME": "3000",
+        "S6_SERVICES_GRACETIME": "3000"
+      }
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+# fly.toml app configuration file generated for fly-dev-env on 2025-01-22T09:37:26-06:00
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = "fly-dev-env"
+primary_region = "atl"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[mounts]
+  source = "data"
+  destination = "/data"
+  initial_size = "50GB"
+  auto_extend_size_threshold = 80
+  auto_extend_size_increment = "10GB"
+  auto_extend_size_limit = "500GB"
+
+[env]
+  SHELL = "/bin/bash"
+
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 8
+  memory_mb = 8192

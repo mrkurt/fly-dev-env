@@ -1,0 +1,24 @@
+#!/bin/bash
+set -e
+
+# Generate a temporary key pair
+ssh-keygen -t ed25519 -f /tmp/temp_key -N ''
+
+# Sign it with the host key (which is configured as CA)
+ssh-keygen -s /etc/ssh/ssh_host_ed25519_key -I "temp_cert_$(date +%s)" -n dev -V +1h /tmp/temp_key.pub
+
+# Output in a format easy to parse
+echo "=== BEGIN SSH PRIVATE KEY ==="
+cat /tmp/temp_key
+echo "=== END SSH PRIVATE KEY ==="
+echo
+echo "=== BEGIN SSH PUBLIC KEY ==="
+cat /tmp/temp_key.pub
+echo "=== END SSH PUBLIC KEY ==="
+echo
+echo "=== BEGIN SSH CERTIFICATE ==="
+cat /tmp/temp_key-cert.pub
+echo "=== END SSH CERTIFICATE ==="
+
+# Clean up
+rm -f /tmp/temp_key /tmp/temp_key.pub /tmp/temp_key-cert.pub 

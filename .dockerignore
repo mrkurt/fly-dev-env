@@ -1,0 +1,8 @@
+# Ignore everything
+*
+
+# Only include files needed for build
+!Dockerfile
+!overlayfs-init
+!services/
+!services/**

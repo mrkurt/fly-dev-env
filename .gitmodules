@@ -1,0 +1,3 @@
+[submodule "reference/flyctl"]
+	path = reference/flyctl
+	url = git@github.com:superfly/flyctl.git

@@ -1,0 +1,53 @@
+{
+  "app": "fly-dev-env",
+  "env": {
+    "FLY_PROCESS_GROUP": "app",
+    "PRIMARY_REGION": "atl",
+    "SHELL": "/bin/bash"
+  },
+  "init": {},
+  "guest": {
+    "cpu_kind": "shared",
+    "cpus": 8,
+    "memory_mb": 8192
+  },
+  "metadata": {
+    "fly_flyctl_version": "0.3.66",
+    "fly_platform_version": "v2",
+    "fly_process_group": "app",
+    "fly_release_id": "XaYvVXJNNq9YPTOwJv80k9ZKe",
+    "fly_release_version": "6"
+  },
+  "restart": {
+    "policy": "on-failure",
+    "max_retries": 10
+  },
+  "volumes": [
+    {
+      "name": "data"
+    }
+  ],
+  "mounts": [
+    {
+      "volume": "vol_vd8ygj6qe26o7314",
+      "path": "/data"
+    }
+  ],
+  "containers": [
+    {
+      "name": "app",
+      "image": "registry.fly.io/fly-dev-env:deployment-01JJ7H055SWDFZZ877XNXJ9346",
+      "command": [
+        "sh",
+        "-c",
+        "mkdir -p /mnt/newroot && /usr/local/bin/overlayfs-init"
+      ],
+      "env": {
+        "S6_CMD_WAIT_FOR_SERVICES": "1",
+        "S6_CMD_WAIT_FOR_SERVICES_MAXTIME": "0",
+        "S6_KILL_GRACETIME": "3000",
+        "S6_SERVICES_GRACETIME": "3000"
+      }
+    }
+  ]
+}

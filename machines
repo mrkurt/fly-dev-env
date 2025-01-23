@@ -1,0 +1,5 @@
+#!/bin/sh
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+COMMAND="$1"
+shift
+cd "$SCRIPT_DIR/cli" && deno run --allow-run --allow-net --allow-env --allow-read --allow-write mod.ts "$COMMAND" "$SCRIPT_DIR" "$@" 
