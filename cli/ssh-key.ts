@@ -1,117 +1,115 @@
+// SSH key installation and management
+// NEVER pass command args as multiple array entries when using fly machines exec,
+// always put full commands in one string, e.g.:
+// GOOD: ["sh -c \"mkdir -p /home/dev/.ssh && chmod 700 /home/dev/.ssh\""]
+// BAD:  ["sh", "-c", "mkdir -p /home/dev/.ssh && chmod 700 /home/dev/.ssh"]
+
 import { parse } from "@std/flags";
-import { green, bold } from "@std/fmt/colors";
+import { green } from "@std/fmt/colors";
+import { execAsUser } from "./util.ts";
 
 interface InstallArgs {
   app: string;
-  machine: string;
-  generate?: boolean;
+  machine?: string;
+  help?: boolean;
+  remove?: string;
+  key?: string;
 }
 
-async function getAuthToken(): Promise<string> {
-  const tokenProcess = new Deno.Command("flyctl", {
-    args: ["auth", "token"],
+async function getMachineId(app: string): Promise<string> {
+  const machineCmd = new Deno.Command("fly", {
+    args: ["machines", "list", "--app", app, "--json"],
     stdout: "piped",
-    stderr: "piped",
   });
-
-  const output = await tokenProcess.output();
-  if (!output.success) {
-    throw new Error("Failed to get auth token");
+  const machineResult = await machineCmd.output();
+  if (!machineResult.success) {
+    throw new Error("Failed to get machine information");
   }
-
-  return new TextDecoder().decode(output.stdout).trim();
+  const machines = JSON.parse(new TextDecoder().decode(machineResult.stdout));
+  if (!machines.length) {
+    throw new Error("No machines found");
+  }
+  return machines[0].id;
 }
 
 export async function installKey(args: string[]) {
   const parsedArgs = parse(args, {
-    string: ["app", "machine"],
-    boolean: ["generate"],
-    default: { generate: false }
+    string: ["app", "machine", "remove", "key"],
+    boolean: ["help"],
+    alias: { h: "help" },
+    default: {},
   }) as InstallArgs;
+
+  if (parsedArgs.help) {
+    console.log("Usage: ssh-key --app <app-name> [--machine <machine-id>] [--key <key-file>] [--remove <name@host>]");
+    return;
+  }
 
   if (!parsedArgs.app) {
     throw new Error("--app flag is required");
   }
-  if (!parsedArgs.machine) {
-    throw new Error("--machine flag is required");
+
+  // Get machine ID if not specified
+  const machineId = parsedArgs.machine || await getMachineId(parsedArgs.app);
+
+  // Handle remove if specified
+  if (parsedArgs.remove) {
+    console.log(green("==> ") + `Removing key for ${parsedArgs.remove}...`);
+    await execAsUser(parsedArgs.app, machineId, `sed -i '/${parsedArgs.remove}/d' /home/dev/.ssh/authorized_keys`);
+    console.log(green("✓ ") + "Key removed successfully");
+    return;
   }
 
-  let pubKey: string;
-
-  if (parsedArgs.generate) {
-    console.log(green("==> ") + "Generating new ED25519 key pair...");
-    
-    // Generate key pair and capture output directly
-    const keygenCmd = new Deno.Command("ssh-keygen", {
-      args: [
-        "-t", "ed25519",
-        "-C", `fly-dev-env-${parsedArgs.machine}`,
-        "-f", "/dev/stdout",
-        "-N", ""
-      ],
-      stdout: "piped",
-      stderr: "piped"
-    });
-    
-    const keygenResult = await keygenCmd.output();
-    if (!keygenResult.success) {
-      throw new Error("Failed to generate SSH key pair");
-    }
-
-    // Parse the output to get private and public keys
-    const output = new TextDecoder().decode(keygenResult.stdout);
-    const [privKey, pubKeyOutput] = output.split("\n").filter(line => line.trim().length > 0);
-    pubKey = pubKeyOutput;
-
-    console.log(green("✓ ") + "Generated new ED25519 key pair");
-    console.log("\nPrivate key (save this somewhere safe):\n");
-    console.log(privKey);
-    console.log("\nPublic key:\n");
-    console.log(pubKey);
+  // Determine which key file to use
+  let keyPath: string;
+  if (parsedArgs.key) {
+    keyPath = parsedArgs.key;
   } else {
-    // Read existing public key
-    pubKey = await Deno.readTextFile(Deno.env.get("HOME") + "/.ssh/id_ed25519.pub");
+    keyPath = Deno.env.get("HOME") + "/.ssh/id_rsa.pub";
   }
 
+  // Check if key file exists
+  try {
+    await Deno.stat(keyPath);
+  } catch {
+    throw new Error(`SSH key not found at ${keyPath}`);
+  }
+
+  // Read the public key
+  const pubKey = await Deno.readTextFile(keyPath);
   console.log(green("==> ") + "Installing public key...");
 
-  const token = await getAuthToken();
+  // Create .ssh directory and set permissions if needed
+  await execAsUser(parsedArgs.app, machineId, 'mkdir -p /home/dev/.ssh && chmod 700 /home/dev/.ssh');
 
-  // Create .ssh directory and set permissions
-  const mkdirResponse = await fetch(`https://api.machines.dev/v1/apps/${parsedArgs.app}/machines/${parsedArgs.machine}/exec`, {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${token}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      cmd: "mkdir -p /home/dev/.ssh && chmod 700 /home/dev/.ssh"
-    })
-  });
+  // Install the public key directly - our command escaping handles the quoting
+  await execAsUser(parsedArgs.app, machineId, 
+    `echo '${pubKey.trim()}' > /home/dev/.ssh/authorized_keys && chmod 600 /home/dev/.ssh/authorized_keys`
+  );
 
-  if (!mkdirResponse.ok) {
-    throw new Error("Failed to create .ssh directory: " + await mkdirResponse.text());
-  }
-
-  // Install the public key
-  const installResponse = await fetch(`https://api.machines.dev/v1/apps/${parsedArgs.app}/machines/${parsedArgs.machine}/exec`, {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${token}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      cmd: `echo '${pubKey}' > /home/dev/.ssh/authorized_keys && chmod 600 /home/dev/.ssh/authorized_keys && cat /home/dev/.ssh/authorized_keys`
-    })
-  });
-
-  if (!installResponse.ok) {
-    throw new Error("Failed to install public key: " + await installResponse.text());
-  }
-
-  const responseText = await installResponse.text();
+  // Verify the key was installed correctly
+  const output = await execAsUser(parsedArgs.app, machineId, 'cat /home/dev/.ssh/authorized_keys');
   console.log(green("==> ") + "Installed key contents:");
-  console.log(responseText);
+  console.log(output);
 
-  console.log(green("✓ ") + "SSH key installed successfully");
+  // Double check the key is there and readable
+  await execAsUser(parsedArgs.app, machineId,
+    `grep -q '${pubKey.trim()}' /home/dev/.ssh/authorized_keys || (echo "Key not found in authorized_keys" >&2 && exit 1)`
+  );
+
+  console.log(green("✓ ") + "SSH key installed and verified successfully");
+}
+
+// CLI entrypoint
+if (import.meta.main) {
+  try {
+    await installKey(Deno.args);
+  } catch (error: unknown) {
+    if (error instanceof Error) {
+      console.error("Error:", error.message);
+    } else {
+      console.error("Unknown error:", error);
+    }
+    Deno.exit(1);
+  }
 } 

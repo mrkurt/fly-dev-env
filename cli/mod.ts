@@ -4,6 +4,7 @@ import { deploy } from "./deploy.ts";
 import { ssh } from "./ssh.ts";
 import { installKey } from "./ssh-key.ts";
 import { getCert } from "./get-cert.ts";
+import { execDebug } from "./exec-debug.ts";
 import * as colors from "@std/fmt/colors";
 
 const { green, bold } = colors;
@@ -23,6 +24,7 @@ Commands:
   ssh       Connect to a machine via SSH
   ssh-key   Install SSH keys on a machine
   get-cert  Test getting SSH certificate from a machine
+  exec-debug Debug command execution issues
 
 Options:
   --app     Application name (required)
@@ -43,6 +45,8 @@ const commands = {
   deploy,
   "get-cert": getCert,
   ssh,
+  "ssh-key": installKey,
+  "exec-debug": execDebug,
 } as const;
 
 try {
@@ -61,6 +65,9 @@ try {
       break;
     case "get-cert":
       await getCert(commandArgs);
+      break;
+    case "exec-debug":
+      await execDebug(commandArgs);
       break;
     default:
       console.error(`Error: Unknown command '${command}'`);

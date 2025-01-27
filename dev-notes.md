@@ -84,37 +84,37 @@ This project implements a development environment management system using Fly.io
 - Need better error handling for timeouts
 - Volume attachment process needs improvement
 
-## Future Improvements
-
-### Needed
-1. Better error messages for common failures
-2. Improved machine state monitoring
-3. Faster deployment process
-4. Better volume management
-5. More comprehensive testing
-
-### Nice to Have
-1. Multiple machine support
-2. Region selection
-3. Resource scaling
-4. Backup management
-5. Development environment templates
-
 ## Development Rules
+See `.cursorrules` for all development rules and guidelines.
 
-### Critical Rules
-1. NEVER use `fly machine update`
-2. NEVER use `fly image update`
-3. NEVER use `fly deploy`
-4. ONLY use `fly deploy --build-only --push` for images
-5. ONLY use machines API directly for machine operations
+## Key Findings
 
-### Deno Rules
-1. ALL Deno work MUST be in ./cli directory
-2. Use `jsr:` for dependencies
-3. Use `deno.json` for dependency management
-4. Pin all dependency versions
-5. ALWAYS use `deno add` for packages
-6. ALWAYS check `deno info <pkg>` before using
-7. DO NOT use deprecated or unstable APIs
-8. Keep features in single, complete files 
+### Command Execution
+- NEVER pass command args as multiple array entries when using fly machines exec
+- BAD: `["sh", "-c", "mkdir -p /home/dev/.ssh"]`
+- GOOD: `["sh -c \"mkdir -p /home/dev/.ssh\""]`
+- Command array items need proper quoting
+- Full paths (e.g. /bin/ls) are more reliable
+- Different apps may require different command formats
+
+### Machine State Issues
+- Machines can get "wedged" causing EOF errors
+- Error manifests as: "unknown: failed to run command: EOF"
+- This is a machine state issue, not a command format problem
+- Solution: Restart the machine when this occurs
+
+### SSH Key Management
+- Keys stored in ./tmp directory (added to .gitignore)
+- Using base64 encoding for key transfer prevents quoting/escaping issues
+- Proper permission handling (700 for .ssh dir, 600 for authorized_keys)
+- Public key installed to /home/dev/.ssh/authorized_keys
+- SSH Connection:
+  - Requires proxy process to be running
+  - Uses port 2222 by default
+  - Explicit key path needed (-i ./tmp/test_key)
+
+### Container Setup
+- Using s6-overlay for service management
+- Proper signal handling
+- Clean shutdown support
+- OverlayFS for development isolation 

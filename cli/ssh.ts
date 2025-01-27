@@ -1,3 +1,13 @@
+// SSH connection management
+// NEVER pass command args as multiple array entries when using fly machines exec,
+// always put full commands in one string, e.g.:
+// GOOD: ["sh -c \"mkdir -p /home/dev/.ssh && chmod 700 /home/dev/.ssh\""]
+// BAD:  ["sh", "-c", "mkdir -p /home/dev/.ssh && chmod 700 /home/dev/.ssh"]
+//
+// NOTE: If commands fail with "unknown: failed to run command: EOF",
+// this usually indicates the machine is in a bad state and needs
+// to be restarted. This is not a problem with the command format.
+
 import { parse } from "@std/flags";
 import { green } from "@std/fmt/colors";
 
@@ -58,6 +68,7 @@ export async function ssh(args: string[]) {
   console.log(green("==> ") + "Connecting via SSH...");
   const sshCmd = new Deno.Command("ssh", {
     args: [
+      "-i", "./tmp/test_key",
       "-p", proxyPort.toString(),
       "-o", "StrictHostKeyChecking=no",
       "-o", "UserKnownHostsFile=/dev/null",
