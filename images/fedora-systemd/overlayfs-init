@@ -1,0 +1,63 @@
+#!/bin/bash
+set -euo pipefail
+
+env
+
+pwd=$(pwd)
+shell="${SHELL}"
+home="${HOME}"
+
+# Configuration
+UPPER_DIR="/data/upper"
+WORK_DIR="/data/work"
+NEW_ROOT="/mnt/newroot"
+
+# Create required directories
+mkdir -p "${UPPER_DIR}" "${WORK_DIR}" "${NEW_ROOT}"
+
+# Mount the current root filesystem to new_root 
+mount --bind / "${NEW_ROOT}"
+
+# Create the overlay on top of new_root
+mount -t overlay overlay \
+    -o lowerdir="${NEW_ROOT}",upperdir="${UPPER_DIR}",workdir="${WORK_DIR}" \
+    "${NEW_ROOT}" || {
+        echo "Failed to mount overlay filesystem"
+        umount "${NEW_ROOT}"
+        exit 1
+    }
+
+# Create a directory for the old root in the overlay
+mkdir -p "${NEW_ROOT}/oldroot"
+
+# Bind mount only essential system directories that need special handling
+essential_mounts=(
+    "/dev"
+    "/proc"
+    "/sys"
+    "/run"
+    "/var/log/journal"  # Required for systemd journald
+)
+
+cd /
+for dir in "${essential_mounts[@]}"; do
+    if [ -d "$dir" ]; then
+        if mountpoint -q "${dir}"; then
+            # For mountpoints, do rbind and make slave
+            mount --rbind "${dir}" "${NEW_ROOT}${dir}"
+            mount --make-rslave "${NEW_ROOT}${dir}"
+        fi
+    fi
+done
+
+mount --bind /tmp "${NEW_ROOT}/tmp"
+
+# Switch root
+cd "${NEW_ROOT}"
+pivot_root . oldroot
+
+echo "Successfully switched to overlay root filesystem"
+mount | grep overlay
+
+# Hand off to systemd
+exec "$@" 

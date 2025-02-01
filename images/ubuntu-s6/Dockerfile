@@ -1,27 +1,29 @@
-FROM fedora:41
-
-# Create dev user and group
-RUN groupadd -g 1000 dev && \
-    useradd -m -s /bin/bash -u 1000 -g 1000 dev
-
-# Set up SSH
-RUN mkdir -p /home/dev/.ssh && \
-    chmod 700 /home/dev/.ssh && \
-    chown -R dev:dev /home/dev/.ssh
+FROM ubuntu:22.04
 
 # Install required packages
-RUN dnf -y update && dnf -y install --skip-unavailable \
-    systemd \
+RUN apt-get update && apt-get install -y \
+    curl \
+    xz-utils \
     sudo \
     openssh-server \
-    openssh-clients \
-    chromium \
-    chromium-headless \
-    && dnf clean all
+    openssh-client \
+    s6 \
+    tzdata \
+    && rm -rf /var/lib/apt/lists/*
+
+# Add dev user
+RUN useradd -m -s /bin/bash dev && \
+    passwd -d dev && \
+    passwd -u dev && \
+    usermod -aG sudo dev \
+    && echo "dev ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/dev \
+    && chmod 0440 /etc/sudoers.d/dev
 
 # Set up SSH authorized_keys for dev user
-COPY sshd_config /etc/ssh/sshd_config
-RUN echo "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJwZGlBuqZNvfXMkCYwkqaZet1XhwvmtRrAEBEN6f5P5 dev@fly" > /home/dev/.ssh/authorized_keys && \
+RUN mkdir -p /home/dev/.ssh && \
+    chmod 700 /home/dev/.ssh && \
+    chown dev:dev /home/dev/.ssh && \
+    touch /home/dev/.ssh/authorized_keys && \
     chmod 600 /home/dev/.ssh/authorized_keys && \
     chown dev:dev /home/dev/.ssh/authorized_keys
 
@@ -47,9 +49,8 @@ RUN mkdir -p /etc/s6-overlay/s6-rc.d/container-alive/dependencies.d \
 RUN touch /etc/s6-overlay/s6-rc.d/user/contents.d/container-alive \
     /etc/s6-overlay/s6-rc.d/user/contents.d/openssh
 
-# Copy and configure certificate generation script
-COPY services/generate-cert /usr/local/bin/generate-cert
-RUN chmod +x /usr/local/bin/generate-cert
+# Configure SSH
+COPY services/sshd/sshd_config /etc/ssh/sshd_config
 
 # Copy overlayfs-init script
 COPY overlayfs-init /usr/local/bin/overlayfs-init
@@ -65,5 +66,4 @@ ENV S6_BEHAVIOUR_IF_STAGE2_FAILS=2 \
     S6_KEEP_ENV=1 \
     S6_DISABLE_LEGACY=1
 
-# Start systemd
-CMD ["/usr/sbin/init"] 
+ENTRYPOINT ["/usr/local/bin/overlayfs-init"] 

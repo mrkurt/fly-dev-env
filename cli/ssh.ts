@@ -29,14 +29,14 @@ async function getMachineId(app: string): Promise<string> {
 
 export async function ssh(args: string[]) {
   const parsedArgs = parse(args, {
-    string: ["app"],
+    string: ["app", "machine"],
     boolean: ["help"],
     alias: { h: "help" },
     default: {},
   });
 
   if (parsedArgs.help) {
-    console.log("Usage: ssh --app <app-name>");
+    console.log("Usage: ssh --app <app-name> [--machine <machine-id>]");
     return;
   }
 
@@ -44,15 +44,20 @@ export async function ssh(args: string[]) {
     throw new Error("--app flag is required");
   }
 
-  // Get machine ID and start proxy
-  console.log(green("==> ") + "No machine specified, getting first available machine...");
-  const machineId = await getMachineId(parsedArgs.app);
+  // Get machine ID if not specified
+  let machineId: string;
+  if (parsedArgs.machine) {
+    machineId = parsedArgs.machine;
+  } else {
+    console.log(green("==> ") + "No machine specified, getting first available machine...");
+    machineId = await getMachineId(parsedArgs.app);
+  }
 
   // Start fly proxy in the background
   const proxyPort = 2222;
   console.log(green("==> ") + "Starting proxy on port " + proxyPort + "...");
   const proxyCmd = new Deno.Command("fly", {
-    args: ["proxy", `${proxyPort}:22`, "--app", parsedArgs.app],
+    args: ["proxy", `${proxyPort}:22`, "--app", parsedArgs.app, "--machine", machineId],
     stdin: "null",
     stdout: "inherit",
     stderr: "inherit",

@@ -10,7 +10,8 @@ import { parse } from "@std/flags";
 import { buildImage } from "./build.ts";
 import { dirname, fromFileUrl } from "@std/path";
 import { delay } from "@std/async";
-import { green, bold } from "@std/fmt/colors";
+import { green, bold, red } from "@std/fmt/colors";
+import { ImageType, IMAGES } from "./image-types.ts";
 
 // Machine config template that should be used for all machines
 const MACHINE_CONFIG = {
@@ -26,19 +27,21 @@ const MACHINE_CONFIG = {
     cpus: 1,
     memory_mb: 256
   },
-  metadata: {},
+  metadata: {
+    "image-type": "" // Will be injected
+  },
   restart: {
     policy: "on-failure",
     max_retries: 0
   },
   volumes: [
     {
-      name: "data"
+      name: "" // Will be injected with image-type prefix
     }
   ],
   mounts: [
     {
-      volume: "data",
+      volume: "", // Will be injected with image-type prefix
       path: "/data"
     }
   ],
@@ -250,11 +253,64 @@ async function destroyMachine(appName: string, machineId: string): Promise<void>
   }
 }
 
-async function createMachine(appName: string, imageRef: string, volumeId: string): Promise<Machine> {
-  const token = await getAuthToken();
+// Find a machine by image type
+async function findMachineByImageType(appName: string, imageType: string): Promise<Machine | undefined> {
+  const machines = await getMachines(appName);
+  return machines.find(m => m.config?.metadata?.["image-type"] === imageType);
+}
+
+// Find or create volume for image type
+async function findOrCreateVolume(appName: string, imageType: string): Promise<string> {
+  // Convert image type to valid volume name (replace hyphens with underscores)
+  const volumeName = `data_${imageType.replace(/-/g, "_")}`;
+  const volumes = await getVolumes(appName);
+  const volume = volumes.find(v => v.name === volumeName);
   
-  // Clone the template and inject the image
+  if (volume) {
+    return volume.id;
+  }
+
+  // Create new volume if it doesn't exist
+  const token = await getAuthToken();
+  const volumeData = {
+    name: volumeName,
+    region: "atl",
+    size_gb: 50,
+    encrypted: true,
+    requires_unique_zone: false
+  };
+
+  const response = await fetch(`https://api.machines.dev/v1/apps/${appName}/volumes`, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(volumeData),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error("Volume creation request:", JSON.stringify(volumeData, null, 2));
+    throw new Error(`Failed to create volume: ${response.status} ${response.statusText}\n${errorText}`);
+  }
+
+  const newVolume = await response.json();
+  return newVolume.id;
+}
+
+// Create a new machine with the given image type
+async function createMachine(appName: string, imageRef: string, imageType: string): Promise<string> {
+  const token = await getAuthToken();
+  const volumeId = await findOrCreateVolume(appName, imageType);
+  
+  // Create machine config
   const config = structuredClone(MACHINE_CONFIG);
+  config.metadata["image-type"] = imageType;
+  // Use same volume name format as in findOrCreateVolume
+  const volumeName = `data_${imageType.replace(/-/g, "_")}`;
+  config.volumes[0].name = volumeName;
+  config.mounts[0].volume = volumeName;
   config.containers[0].image = imageRef;
 
   const response = await fetch(`https://api.machines.dev/v1/apps/${appName}/machines`, {
@@ -263,9 +319,9 @@ async function createMachine(appName: string, imageRef: string, volumeId: string
       "Authorization": `Bearer ${token}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ 
+    body: JSON.stringify({
       config,
-      region: "atl", // Match volume region
+      region: "atl",
       volume_attachments: [{
         volume: volumeId
       }]
@@ -274,97 +330,61 @@ async function createMachine(appName: string, imageRef: string, volumeId: string
 
   if (!response.ok) {
     const errorText = await response.text();
+    console.error("Machine creation request:", JSON.stringify({config, region: "atl", volume_attachments: [{volume: volumeId}]}, null, 2));
     throw new Error(`Failed to create machine: ${response.status} ${response.statusText}\n${errorText}`);
   }
 
-  return await response.json();
+  const machine = await response.json();
+  return machine.id;
 }
 
 // Main deploy function
-export async function deploy(args: string[]) {
+export async function deploy(args: string[]): Promise<void> {
   const parsedArgs = parse(args, {
-    string: ["app"],
-    default: {}
+    string: ["app", "type"],
+    default: {
+      type: "ubuntu-s6" // Default to ubuntu-s6 for backward compatibility
+    }
   });
 
   if (!parsedArgs.app) {
     throw new Error("--app flag is required");
   }
 
-  // Check if volume exists, create if not
-  console.log(green("==> ") + "Checking for data volume...");
-  const volumeCmd = new Deno.Command("fly", {
-    args: ["volumes", "list", "--app", parsedArgs.app, "--json"],
-    stdout: "piped"
-  });
-  const volumeResult = await volumeCmd.output();
-  if (!volumeResult.success) {
-    throw new Error("Failed to list volumes");
-  }
-  const volumes = JSON.parse(new TextDecoder().decode(volumeResult.stdout));
-  let dataVolume = volumes.find((v: any) => v.name === "data");
-  
-  if (!dataVolume) {
-    console.log(green("==> ") + "Creating 100GB data volume...");
-    const createCmd = new Deno.Command("fly", {
-      args: ["volumes", "create", "data", "--size", "100", "--app", parsedArgs.app, "-y", "--region", "atl", "--json"],
-      stdout: "piped",
-      stderr: "inherit"
-    });
-    const createResult = await createCmd.output();
-    if (!createResult.success) {
-      throw new Error("Failed to create volume");
-    }
-    // Parse volume ID from creation output
-    const createOutput = new TextDecoder().decode(createResult.stdout);
-    dataVolume = JSON.parse(createOutput);
+  const imageType = parsedArgs.type as ImageType;
+  if (!IMAGES[imageType]) {
+    throw new Error(`Invalid image type: ${imageType}. Available types: ${Object.keys(IMAGES).join(", ")}`);
   }
 
-  // Build image first
-  console.log(green("==> ") + "Building image...");
-  const buildCmd = new Deno.Command("fly", {
-    args: ["deploy", "--build-only", "--push", "--app", parsedArgs.app, parsedArgs._[0] as string],
-    stdout: "piped",
-    stderr: "piped"
-  });
-  const buildResult = await buildCmd.output();
-  if (!buildResult.success) {
-    throw new Error("Failed to build image");
-  }
+  console.log(green("==> ") + `Deploying ${bold(IMAGES[imageType].name)}...`);
 
-  // Parse the image tag from the build output
-  const buildOutput = new TextDecoder().decode(buildResult.stdout) + new TextDecoder().decode(buildResult.stderr);
-  // Print the output so we can see the build progress
-  console.log(buildOutput);
-  
-  const imageMatch = buildOutput.match(/pushing manifest for (registry\.fly\.io\/[^:]+:deployment-[^\s@]+)/);
-  if (!imageMatch) {
-    throw new Error("Could not find image tag in build output");
-  }
-  const imageRef = imageMatch[1];
+  // Build the image
+  const imageRef = await buildImage(args);
 
-  // Get machine info
-  console.log(green("==> ") + "Getting machine info...");
-  const machines = await getMachines(parsedArgs.app);
-  
+  // Find existing machine of this type
+  const existingMachine = await findMachineByImageType(parsedArgs.app, imageType);
   let machineId: string;
-  if (!machines.length) {
-    console.log(green("==> ") + "No machines found, creating new machine...");
-    const machine = await createMachine(parsedArgs.app, imageRef, dataVolume.id);
-    machineId = machine.id;
-  } else {
-    machineId = machines[0].id;
-    // Update existing machine with new image
-    console.log(green("==> ") + "Updating machine " + machineId + "...");
+
+  if (existingMachine) {
+    console.log(green("==> ") + "Updating existing machine...");
+    // Update existing machine
     const config = structuredClone(MACHINE_CONFIG);
+    config.metadata["image-type"] = imageType;
+    config.volumes[0].name = `data_${imageType.replace(/-/g, "_")}`;
+    config.mounts[0].volume = `data_${imageType.replace(/-/g, "_")}`;
     config.containers[0].image = imageRef;
-    await updateMachine(parsedArgs.app, machineId, config);
+    
+    await updateMachine(parsedArgs.app, existingMachine.id, config);
+    machineId = existingMachine.id;
+  } else {
+    console.log(green("==> ") + "Creating new machine...");
+    // Create new machine
+    machineId = await createMachine(parsedArgs.app, imageRef, imageType);
   }
 
   // Wait for machine to start
   await waitForMachine(parsedArgs.app, machineId);
-
-  console.log(green("✓ ") + "Deployment completed successfully");
+  console.log(green("✓ ") + "Deploy completed successfully");
 }
 
 // CLI entrypoint
