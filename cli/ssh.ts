@@ -57,7 +57,7 @@ export async function ssh(args: string[]) {
   const proxyPort = 2222;
   console.log(green("==> ") + "Starting proxy on port " + proxyPort + "...");
   const proxyCmd = new Deno.Command("fly", {
-    args: ["proxy", `${proxyPort}:22`, "--app", parsedArgs.app, "--machine", machineId],
+    args: ["proxy", `${proxyPort}:22`, "-a", parsedArgs.app],
     stdin: "null",
     stdout: "inherit",
     stderr: "inherit",
@@ -77,7 +77,7 @@ export async function ssh(args: string[]) {
       "-p", proxyPort.toString(),
       "-o", "StrictHostKeyChecking=no",
       "-o", "UserKnownHostsFile=/dev/null",
-      "dev@localhost",
+      "root@localhost",
     ],
     stdin: "inherit",
     stdout: "inherit",

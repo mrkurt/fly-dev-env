@@ -1,0 +1,11 @@
+#!/command/with-contenv bash
+
+# Wait a moment for services to fully start
+sleep 2
+
+echo "=== Service Status ==="
+s6-rc -l /run/service -a list
+echo "===================="
+
+# Exit successfully
+exit 0 

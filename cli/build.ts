@@ -24,7 +24,7 @@ export async function buildImage(args: string[]): Promise<string> {
   const parsedArgs = parse(args, {
     string: ["app", "type"],
     default: {
-      type: "ubuntu-s6" // Default to ubuntu-s6 for backward compatibility
+      type: "fedora-systemd" // Default to Fedora with systemd
     }
   });
 

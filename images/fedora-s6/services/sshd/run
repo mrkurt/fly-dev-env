@@ -1,0 +1,7 @@
+#!/command/with-contenv bash
+
+# Generate host keys if they don't exist
+ssh-keygen -A
+
+# Start sshd with readiness check
+exec s6-notifyoncheck --ready --timeout 5000 /usr/sbin/sshd -D -e 

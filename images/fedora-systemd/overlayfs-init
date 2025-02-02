@@ -1,8 +1,6 @@
 #!/bin/bash
 set -euo pipefail
 
-env
-
 pwd=$(pwd)
 shell="${SHELL}"
 home="${HOME}"
@@ -27,16 +25,19 @@ mount -t overlay overlay \
         exit 1
     }
 
-# Create a directory for the old root in the overlay
-mkdir -p "${NEW_ROOT}/oldroot"
+# # Create a directory for the old root in the overlay
+# mkdir -p "${NEW_ROOT}/oldroot"
+
+# Ensure cgroup mount points exist
+mkdir -p "${NEW_ROOT}/sys/fs/cgroup"
 
 # Bind mount only essential system directories that need special handling
 essential_mounts=(
     "/dev"
-    "/proc"
+    "/proc"    # Required for process information
     "/sys"
     "/run"
-    "/var/log/journal"  # Required for systemd journald
+    "/sys/fs/cgroup"    # Required for systemd cgroups
 )
 
 cd /
@@ -50,6 +51,14 @@ for dir in "${essential_mounts[@]}"; do
     fi
 done
 
+# Ensure cgroups are properly mounted for systemd
+if [ -d "${NEW_ROOT}/sys/fs/cgroup" ]; then
+    # Make sure cgroup2 is mounted
+    if ! mountpoint -q "${NEW_ROOT}/sys/fs/cgroup"; then
+        mount -t cgroup2 none "${NEW_ROOT}/sys/fs/cgroup"
+    fi
+fi
+
 mount --bind /tmp "${NEW_ROOT}/tmp"
 
 # Switch root
@@ -57,7 +66,14 @@ cd "${NEW_ROOT}"
 pivot_root . oldroot
 
 echo "Successfully switched to overlay root filesystem"
-mount | grep overlay
 
+# Hide old root from systemd by mounting tmpfs over it
+mount -t tmpfs tmpfs /oldroot
+
+# Test direct write to fd1
+echo "Direct write test to /proc/self/fd/1" > /proc/self/fd/1
+echo "Direct write test to /proc/self/fd/2" > /proc/self/fd/2
+
+echo "Running: $@"
 # Hand off to systemd
-exec "$@" 
+exec "$@"

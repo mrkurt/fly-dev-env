@@ -2,8 +2,9 @@
   "app": "fly-dev-env",
   "env": {
     "FLY_PROCESS_GROUP": "app",
-    "PRIMARY_REGION": "atl",
-    "SHELL": "/bin/bash"
+    "PRIMARY_REGION": "dfw",
+    "SHELL": "/bin/bash",
+    "FLYSSH_AUTH_TOKEN": "{{FLYSSH_AUTH_TOKEN}}"
   },
   "init": {},
   "guest": {
@@ -36,18 +37,23 @@
   "containers": [
     {
       "name": "app",
-      "image": "registry.fly.io/fly-dev-env:deployment-01JJ7H055SWDFZZ877XNXJ9346",
-      "command": [
-        "sh",
-        "-c",
-        "mkdir -p /mnt/newroot && /usr/local/bin/overlayfs-init"
+      "image": "registry.fly.io/fly-dev-env:deployment-01JJ7H055SWDFZZ877XNXJ9346"
+    }
+  ],
+  "services": [
+    {
+      "ports": [
+        {
+          "port": 80,
+          "handlers": ["http"]
+        },
+        {
+          "port": 443,
+          "handlers": ["http", "tls"]
+        }
       ],
-      "env": {
-        "S6_CMD_WAIT_FOR_SERVICES": "1",
-        "S6_CMD_WAIT_FOR_SERVICES_MAXTIME": "0",
-        "S6_KILL_GRACETIME": "3000",
-        "S6_SERVICES_GRACETIME": "3000"
-      }
+      "protocol": "tcp",
+      "internal_port": 8080
     }
   ]
 }
