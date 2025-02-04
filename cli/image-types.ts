@@ -1,5 +1,5 @@
 // Available image types
-export type ImageType = "fedora-systemd" | "fedora-s6";
+export type ImageType = "fedora-s6";
 
 // Image type configuration
 export interface ImageConfig {
@@ -10,11 +10,6 @@ export interface ImageConfig {
 
 // Map of available images
 export const IMAGES: Record<ImageType, ImageConfig> = {
-  "fedora-systemd": {
-    path: "images/fedora-systemd",
-    name: "Fedora with systemd",
-    description: "Fedora 41 with systemd init system"
-  },
   "fedora-s6": {
     path: "images/fedora-s6",
     name: "Fedora with s6",

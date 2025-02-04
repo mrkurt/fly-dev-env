@@ -40,9 +40,11 @@ RUN dnf -y update && \
 
 # Install minimal s6-overlay
 ARG S6_OVERLAY_VERSION=3.1.6.2
-RUN curl -L -f https://github.com/just-containers/s6-overlay/releases/download/v${S6_OVERLAY_VERSION}/s6-overlay-x86_64.tar.xz -o /tmp/s6-overlay.tar.xz && \
-    tar -C / -Jxpf /tmp/s6-overlay.tar.xz && \
-    rm /tmp/s6-overlay.tar.xz
+RUN curl -L -f https://github.com/just-containers/s6-overlay/releases/download/v${S6_OVERLAY_VERSION}/s6-overlay-noarch.tar.xz -o /tmp/s6-overlay-noarch.tar.xz && \
+    curl -L -f https://github.com/just-containers/s6-overlay/releases/download/v${S6_OVERLAY_VERSION}/s6-overlay-x86_64.tar.xz -o /tmp/s6-overlay-x86_64.tar.xz && \
+    tar -C / -Jxpf /tmp/s6-overlay-noarch.tar.xz && \
+    tar -C / -Jxpf /tmp/s6-overlay-x86_64.tar.xz && \
+    rm /tmp/s6-overlay-*.tar.xz
 
 # Configure s6 to use only new s6-rc system
 ENV S6_BEHAVIOUR_IF_STAGE2_FAILS=2 \
@@ -74,10 +76,6 @@ RUN mkdir -p /root/.ssh && \
 
 # Configure SSH
 COPY services/sshd/sshd_config /etc/ssh/sshd_config
-
-# Download flyssh binary
-RUN curl -L -f https://github.com/superfly/flyssh/releases/download/v0.1.3/flyssh-linux-amd64 -o /usr/local/bin/flyssh && \
-    chmod +x /usr/local/bin/flyssh
 
 # Copy s6 service definitions
 COPY services/sshd /etc/s6-overlay/s6-rc.d/sshd

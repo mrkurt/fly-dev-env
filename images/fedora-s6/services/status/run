@@ -3,6 +3,9 @@
 # Wait a moment for services to fully start
 sleep 2
 
+# Start status check with readiness check
+exec s6-notifyoncheck -3 3 -c "s6-rc -l /run/service -a list" s6-rc -l /run/service -a list
+
 echo "=== Service Status ==="
 s6-rc -l /run/service -a list
 echo "===================="
