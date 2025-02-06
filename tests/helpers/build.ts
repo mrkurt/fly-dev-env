@@ -12,7 +12,6 @@ export async function buildTestContainer(name: string): Promise<void> {
   const buildCmd = new Deno.Command("docker", {
     args: [
       "build",
-      "--platform", "linux/arm64",
       "-t", `${imageName}-test:latest`,
       "-f", "Dockerfile.test",
       ".",

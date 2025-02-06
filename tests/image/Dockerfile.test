@@ -1,0 +1,87 @@
+FROM ubuntu:24.04
+
+# Install base packages and build dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    build-essential \
+    unzip \
+    autoconf \
+    libtool \
+    pkg-config \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install s6-overlay
+ARG S6_OVERLAY_VERSION=3.1.6.2
+RUN curl -L -f https://github.com/just-containers/s6-overlay/releases/download/v${S6_OVERLAY_VERSION}/s6-overlay-noarch.tar.xz -o /tmp/s6-overlay-noarch.tar.xz && \
+    curl -L -f https://github.com/just-containers/s6-overlay/releases/download/v${S6_OVERLAY_VERSION}/s6-overlay-aarch64.tar.xz -o /tmp/s6-overlay-aarch64.tar.xz && \
+    tar -C / -Jxpf /tmp/s6-overlay-noarch.tar.xz && \
+    tar -C / -Jxpf /tmp/s6-overlay-aarch64.tar.xz && \
+    rm /tmp/s6-overlay-*.tar.xz
+
+# Install s6 from source
+ENV SKALIBS_VERSION=2.14.1.1
+ENV EXECLINE_VERSION=2.9.4.0
+ENV S6_VERSION=2.12.0.3
+
+# Install skalibs first
+RUN cd /tmp && \
+    curl -L -f https://skarnet.org/software/skalibs/skalibs-${SKALIBS_VERSION}.tar.gz -o skalibs.tar.gz && \
+    tar xf skalibs.tar.gz && \
+    cd skalibs-${SKALIBS_VERSION} && \
+    ./configure --prefix=/usr && \
+    make && \
+    make install && \
+    cd .. && \
+    rm -rf skalibs*
+
+# Install execline
+RUN cd /tmp && \
+    curl -L -f https://skarnet.org/software/execline/execline-${EXECLINE_VERSION}.tar.gz -o execline.tar.gz && \
+    tar xf execline.tar.gz && \
+    cd execline-${EXECLINE_VERSION} && \
+    ./configure --prefix=/usr && \
+    make && \
+    make install && \
+    cd .. && \
+    rm -rf execline*
+
+# Install s6
+RUN cd /tmp && \
+    curl -L -f https://skarnet.org/software/s6/s6-${S6_VERSION}.tar.gz -o s6.tar.gz && \
+    tar xf s6.tar.gz && \
+    cd s6-${S6_VERSION} && \
+    ./configure --prefix=/usr && \
+    make && \
+    make install && \
+    cd .. && \
+    rm -rf s6*
+
+# Install Deno
+ENV DENO_VERSION=1.41.3
+RUN curl -fsSL https://github.com/denoland/deno/releases/download/v${DENO_VERSION}/deno-aarch64-unknown-linux-gnu.zip \
+    -o deno.zip \
+    && unzip deno.zip \
+    && rm deno.zip \
+    && chmod 755 deno \
+    && mv deno /usr/bin/deno
+
+WORKDIR /app
+
+# Copy s6 configuration
+COPY tests/image/s6/env/* /etc/s6/env.d/
+COPY tests/image/s6/test-runner /etc/s6-rc/source/test-runner
+COPY tests/image/s6/test-runner-log /etc/s6-rc/source/test-runner-log
+
+# Set up s6 service directories
+RUN mkdir -p /etc/s6-rc/source/test-runner/dependencies.d \
+    && mkdir -p /etc/s6-rc/source/test-runner-log/dependencies.d \
+    && touch /etc/s6-rc/source/test-runner/type \
+    && touch /etc/s6-rc/source/test-runner-log/type \
+    && chmod +x /etc/s6-rc/source/test-runner/run \
+    && chmod +x /etc/s6-rc/source/test-runner-log/run
+
+# Compile s6 service database
+RUN s6-rc-compile /etc/s6-rc/compiled /etc/s6-rc/source
+
+# Set up s6 init
+ENTRYPOINT ["/init"] 

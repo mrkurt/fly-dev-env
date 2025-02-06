@@ -3,13 +3,18 @@
 /**
  * Run a test container
  */
-export async function runTestContainer(name: string): Promise<void> {
+export async function runTestContainer(name: string, cmd?: string[]): Promise<void> {
   const args = [
     "run",
     "--rm",
     "--privileged",
     `${name}:latest`,
   ];
+
+  // If cmd is provided, append it to override the default
+  if (cmd && cmd.length > 0) {
+    args.push(...cmd);
+  }
 
   console.log(`Running test container ${name}...`);
   console.log(`docker ${args.join(" ")}`);
@@ -29,10 +34,12 @@ export async function runTestContainer(name: string): Promise<void> {
 
 // When run directly, run the specified container
 if (import.meta.main) {
-  if (Deno.args.length === 0) {
-    console.error("Usage: run.ts <container-name>");
+  // First arg is container name, rest are optional command args
+  const [name, ...cmd] = Deno.args;
+  if (!name) {
+    console.error("Usage: run.ts <container-name> [cmd...]");
     Deno.exit(1);
   }
 
-  await runTestContainer(Deno.args[0]);
+  await runTestContainer(name, cmd.length > 0 ? cmd : undefined);
 } 

@@ -1,41 +1,70 @@
 # Test container for overlayfs operations with Deno support
-FROM ubuntu:22.04
+FROM fedora:41
 
 # Install required packages
-RUN apt-get update && apt-get install -y \
-    mount \
-    util-linux \
-    kmod \
+RUN dnf install -y \
     curl \
     unzip \
-    && rm -rf /var/lib/apt/lists/*
+    xz \
+    util-linux \
+    && dnf clean all
+
+# Create persistent state directory only - system dir will be created by overlayfs-init
+RUN mkdir -p /data/state && \
+    chmod -R 777 /data/state
+
+# Copy and set up overlayfs-init
+COPY tests/image/overlayfs-init /usr/local/bin/
+RUN chmod +x /usr/local/bin/overlayfs-init
+
+# Install s6-overlay
+ARG S6_OVERLAY_VERSION=3.1.6.2
+RUN ARCH=$(uname -m) && \
+    curl -L -f https://github.com/just-containers/s6-overlay/releases/download/v${S6_OVERLAY_VERSION}/s6-overlay-noarch.tar.xz -o /tmp/s6-overlay-noarch.tar.xz && \
+    curl -L -f https://github.com/just-containers/s6-overlay/releases/download/v${S6_OVERLAY_VERSION}/s6-overlay-${ARCH}.tar.xz -o /tmp/s6-overlay-arch.tar.xz && \
+    curl -L -f https://github.com/just-containers/s6-overlay/releases/download/v${S6_OVERLAY_VERSION}/s6-overlay-symlinks-noarch.tar.xz -o /tmp/s6-overlay-symlinks.tar.xz && \
+    tar -C / -Jxpf /tmp/s6-overlay-noarch.tar.xz && \
+    tar -C / -Jxpf /tmp/s6-overlay-arch.tar.xz && \
+    tar -C / -Jxpf /tmp/s6-overlay-symlinks.tar.xz && \
+    rm /tmp/s6-overlay-*.tar.xz
 
 # Install Deno
 ENV DENO_VERSION=2.1.5
 ENV INSIDE_DOCKER=1
-RUN curl -fsSL https://deno.land/x/install/install.sh | DENO_INSTALL=/usr/local sh -s v${DENO_VERSION} \
-    && ln -s /usr/local/bin/deno /usr/bin/deno
+RUN ARCH=$(uname -m) && \
+    curl -fsSL https://github.com/denoland/deno/releases/download/v${DENO_VERSION}/deno-${ARCH}-unknown-linux-gnu.zip \
+    -o deno.zip \
+    && unzip deno.zip \
+    && rm deno.zip \
+    && chmod 755 deno \
+    && mv deno /usr/bin/deno
 
-# Create test directories
-WORKDIR /test
-RUN mkdir -p /test/lower /test/upper /test/work /test/merged && \
-    chmod 777 /test/lower /test/upper /test/work /test/merged
-
-# Add a test file to lower dir
-RUN echo "Hello from lower layer" > /test/lower/test.txt
-
-# Set up project directory
 WORKDIR /app
 
-# Copy Deno project files
+# Copy all Deno files first
 COPY deno.json deno.lock ./
-COPY mod.ts .
-COPY tests/ tests/
+COPY mod.ts ./
 COPY lib/ lib/
+COPY tests/ tests/
 COPY commands/ commands/
 
-# Install dependencies
-RUN deno cache --lock=deno.lock mod.ts
+# Cache dependencies including tests
+RUN deno cache --lock=deno.lock mod.ts && \
+    deno cache --lock=deno.lock tests/migrate_test.ts
 
-# Default to running tests
-CMD ["deno", "test", "--fail-fast", "--allow-run", "--allow-read", "--allow-write", "--allow-env"] 
+# Copy s6 configuration
+COPY tests/image/s6/env/* /etc/s6/env.d/
+# Copy test-runner service to correct s6-overlay v3 path
+COPY tests/image/s6/test-runner/ /etc/s6-overlay/s6-rc.d/test-runner/
+
+# Add test-runner to user bundle so it starts with container
+RUN mkdir -p /etc/s6-overlay/s6-rc.d/user/contents.d && \
+    touch /etc/s6-overlay/s6-rc.d/user/contents.d/test-runner && \
+    chmod +x /etc/s6-overlay/s6-rc.d/test-runner/run && \
+    chmod +x /etc/s6-overlay/s6-rc.d/test-runner/finish
+
+# Add type file to indicate this is a longrun service
+RUN echo "longrun" > /etc/s6-overlay/s6-rc.d/test-runner/type
+
+# Set up s6 init
+ENTRYPOINT ["/usr/local/bin/overlayfs-init", "/init"] 

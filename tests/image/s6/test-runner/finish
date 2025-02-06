@@ -1,0 +1,9 @@
+#!/bin/sh
+# $1 = exit code
+# $2 = signal (if any)
+
+# Store test result for container exit code
+echo "$1" > /run/test-status
+
+# Signal s6 to perform clean shutdown
+exec s6-svscanctl -t /run/service 
