@@ -1,0 +1,41 @@
+# Test container for overlayfs operations with Deno support
+FROM ubuntu:22.04
+
+# Install required packages
+RUN apt-get update && apt-get install -y \
+    mount \
+    util-linux \
+    kmod \
+    curl \
+    unzip \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Deno
+ENV DENO_VERSION=2.1.5
+ENV INSIDE_DOCKER=1
+RUN curl -fsSL https://deno.land/x/install/install.sh | DENO_INSTALL=/usr/local sh -s v${DENO_VERSION} \
+    && ln -s /usr/local/bin/deno /usr/bin/deno
+
+# Create test directories
+WORKDIR /test
+RUN mkdir -p /test/lower /test/upper /test/work /test/merged && \
+    chmod 777 /test/lower /test/upper /test/work /test/merged
+
+# Add a test file to lower dir
+RUN echo "Hello from lower layer" > /test/lower/test.txt
+
+# Set up project directory
+WORKDIR /app
+
+# Copy Deno project files
+COPY deno.json deno.lock ./
+COPY mod.ts .
+COPY tests/ tests/
+COPY lib/ lib/
+COPY commands/ commands/
+
+# Install dependencies
+RUN deno cache --lock=deno.lock mod.ts
+
+# Default to running tests
+CMD ["deno", "test", "--fail-fast", "--allow-run", "--allow-read", "--allow-write", "--allow-env"] 

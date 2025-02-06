@@ -2,7 +2,9 @@
   "name": "system-migrate",
   "version": "0.1.0",
   "tasks": {
-    "test": "deno test --allow-run --allow-read --allow-write",
+    "test": "deno task test:build && deno task test:run system-migrate-test",
+    "test:build": "deno run --allow-run tests/helpers/build.ts",
+    "test:run": "deno run --allow-run tests/helpers/run.ts",
     "check": "deno check **/*.ts",
     "fmt": "deno fmt"
   },
@@ -20,7 +22,6 @@
     "semiColons": true
   },
   "compilerOptions": {
-    "strict": true,
-    "allowJs": false
+    "strict": true
   }
 } 

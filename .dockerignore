@@ -1,8 +1,16 @@
 # Ignore everything
 *
 
+# Allow Deno files
+!deno.json
+!deno.lock
+!mod.ts
+!tests/
+!lib/
+!commands/
+
 # Only include files needed for build
-!Dockerfile
+!Dockerfile.test
 !overlayfs-init
 !services/
 !services/**
