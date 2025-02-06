@@ -1,6 +1,6 @@
 import { assertEquals } from "@std/assert";
-import { buildImage, startContainer } from "../core/docker.ts";
 import { dirname, fromFileUrl, join } from "@std/path";
+import { buildImage, startContainer } from "$lib/docker.ts";
 
 const TEST_IMAGE = "system-migrate-test:latest";
 
