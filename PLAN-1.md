@@ -5,17 +5,15 @@ This plan outlines the minimal setup needed to test our system migration tooling
 
 ## Project Structure
 ```
-cli/
+.
 ├── deno.json        # Deno configuration (permissions, import maps, tasks)
 ├── mod.ts           # Main CLI entry point (argument parsing, command routing)
-├── deps.ts          # Centralized external dependency imports
 ├── lib/            # Core library code (non-CLI-specific)
 │   ├── docker.ts   # Docker container management
 │   ├── overlay.ts  # Overlayfs operations
 │   └── migrate.ts  # Migration core logic
 ├── commands/       # CLI command implementations
 │   └── migrate.ts  # Migration command handler
-├── README.md       # Project documentation
 └── tests/         # Test directory
     ├── fixtures/  # Test data and containers
     │   └── Dockerfile.test  # Test container definition
@@ -89,7 +87,6 @@ Deno.test("overlayfs hello world", async (t) => {
 ## Running Tests
 Tests will be run with:
 ```bash
-cd cli
 deno test
 ```
 
