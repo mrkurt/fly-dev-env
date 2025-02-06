@@ -1,0 +1,23 @@
+{
+  "name": "system-migrate",
+  "version": "0.1.0",
+  "tasks": {
+    "test": "deno test --allow-run --allow-read --allow-write",
+    "check": "deno check src/**/*.ts"
+  },
+  "imports": {
+    "@std/assert": "jsr:@std/assert@^0.218.2",
+    "@std/testing": "jsr:@std/testing@^0.218.2",
+    "@std/path": "jsr:@std/path@^0.218.2",
+    "@std/fs": "jsr:@std/fs@^0.218.2"
+  },
+  "fmt": {
+    "indentWidth": 2,
+    "lineWidth": 100,
+    "semiColons": true
+  },
+  "compilerOptions": {
+    "strict": true,
+    "allowJs": false
+  }
+} 
