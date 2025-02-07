@@ -1,0 +1,19 @@
+#!/bin/bash
+set -euo pipefail
+
+# Save shell environment
+pwd=$(pwd)
+shell="${SHELL}"
+home="${HOME}"
+
+# Run mount setup first
+cd /app
+deno run --allow-all commands/setup-mounts.ts
+
+# Restore shell environment
+export SHELL="${shell}"
+export HOME="${home}"
+cd "${pwd}" 2>/dev/null || cd /
+
+echo "Running: $@"
+exec "$@"

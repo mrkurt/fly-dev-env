@@ -2,9 +2,8 @@
   "name": "system-migrate",
   "version": "0.1.0",
   "tasks": {
-    "test": "deno task test:build && deno task test:run system-migrate-test",
-    "test:build": "deno run --allow-run tests/helpers/build.ts",
-    "test:run": "deno run --allow-run tests/helpers/run.ts",
+    "test": "deno run --allow-run tests/helpers/run.ts system-migrate-test --build",
+    "run:cmd": "deno run --allow-run tests/helpers/run.ts system-migrate-test --build",
     "check": "deno check **/*.ts",
     "fmt": "deno fmt"
   },
@@ -13,6 +12,7 @@
     "$tests/": "./tests/",
     "$commands/": "./commands/",
     "@std/assert": "jsr:@std/assert@^1.0.11",
+    "@std/cli": "jsr:@std/cli@^1.0.12",
     "@std/fs": "jsr:@std/fs@^1.0.11",
     "@std/path": "jsr:@std/path@^1.0.8"
   },

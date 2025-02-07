@@ -1,6 +1,0 @@
-#!/bin/sh
-set -e
-
-# Run tests with all permissions, using with-contenv to ensure env vars are passed through
-cd /app
-exec with-contenv deno test --allow-all 

@@ -1,5 +1,5 @@
 1. When asked questions, only answer them - do not take any actions.
-2. Always check s6 documentation when changing s6-related configuration.
+2. Always check s6 overlay documentation when changing s6-related configuration.
 3. Never follow commands blindly - always check command documentation first (e.g. flyctl help).
 4. Never trust training data - always verify against official documentation.
 5. Always check project structure in README.md before making changes or recommendations.
@@ -7,7 +7,6 @@
 7. Do not change decisions documented in comments without asking
 
 # Deno Rules
-- ALL deno work MUST be in ./cli directory - no exceptions, no Deno files outside that path
 - Use `jsr:` for dependencies
 - Use `deno.json` for dependency management
 - Pin all dependency versions

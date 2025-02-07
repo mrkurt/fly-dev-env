@@ -1,0 +1,8 @@
+#!/bin/execlineb -P
+cd /app
+foreground { echo "Starting test runner..." }
+export INSIDE_DOCKER 1
+foreground { deno test --allow-all --fail-fast }
+importas -i status ?
+foreground { redirfd -w 1 /run/s6-linux-init-container-results/exitcode echo $status }
+/run/s6/basedir/bin/halt

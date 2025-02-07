@@ -1,11 +1,3 @@
-Understood. I'll find the current best practices for managing dependencies in Deno, specifically focusing on:
-- Using `deno.json` for dependency management.
-- Explicitly specifying the most recent versions for each package.
-- Ensuring all `std` packages are referenced as `@std/pkg` without deeper references.
-- Requiring developers or an LLM to read package documentation using the Deno CLI before using a third-party package.
-
-Once I have the research, I'll create a structured document explaining project layout, dependency management, and best practices that can be given to a developer or LLM.
-
 # Managing Dependencies in Deno: Best Practices (2024)
 
 ## Project Structure
@@ -74,5 +66,4 @@ For any new dependency, you should:
 - Check the documentation with `deno doc <url>`
 - Inspect the dependency tree with `deno info <url>`
 - Review the latest version on JSR or deno.land/x
-- Verify compatibility with your Deno version
-
+- Verify compatibility with your Deno version 

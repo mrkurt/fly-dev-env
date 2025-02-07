@@ -1,0 +1,11 @@
+# System Migration TODOs
+
+- Remove legacy s6 from test image
+  - Currently seeing legacy s6 service warnings in test output
+  - Should only use s6-overlay v3 services 
+
+- Convert overlayfs-init to a Deno command
+  - Currently a bash script in tests/image/overlayfs-init
+  - Should be a TypeScript command in commands/overlayfs-init.ts
+  - Will make it easier to maintain and test
+  - Can reuse helper functions from other commands 

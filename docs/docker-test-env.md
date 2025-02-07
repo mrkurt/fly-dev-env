@@ -81,7 +81,6 @@ We need to modify our test environment to match the production setup, using s6 a
 
    # Run tests with all permissions
    cd /app
-   exec 2>&1
    exec deno test --allow-all
    ```
 
@@ -297,6 +296,4 @@ tests/image/s6/
 ## Next Steps (after tests pass)
 - Add migration functionality
 - Add state persistence tests
-- Add service management tests
-
-[rest of document...] 
+- Add service management tests 

@@ -12,15 +12,12 @@ export interface CommandResult {
 }
 
 /**
- * Run a command and return its output, while also streaming to the console
+ * Run a command and return its output, only showing output if command fails
  * @param cmd The command to run
  * @param args The arguments to pass to the command
  * @returns The command result with stdout, stderr and combined output
  */
 export async function runCommand(cmd: string, args: string[]): Promise<CommandResult> {
-  // Print the command being run
-  console.log("$", [cmd, ...args].join(" "));
-
   const command = new Deno.Command(cmd, {
     args,
     stdout: "piped",
@@ -29,7 +26,6 @@ export async function runCommand(cmd: string, args: string[]): Promise<CommandRe
 
   const process = command.spawn();
   
-  // Create promises for stdout and stderr collection
   const result: CommandResult = {
     success: false,
     stdout: "",
@@ -43,7 +39,6 @@ export async function runCommand(cmd: string, args: string[]): Promise<CommandRe
       const text = decoder.decode(chunk);
       result.stdout += text;
       result.output += text;
-      await Deno.stdout.write(chunk);
     }
   })();
 
@@ -53,7 +48,6 @@ export async function runCommand(cmd: string, args: string[]): Promise<CommandRe
       const text = decoder.decode(chunk);
       result.stderr += text;
       result.output += text;
-      await Deno.stderr.write(chunk);
     }
   })();
 
@@ -65,5 +59,13 @@ export async function runCommand(cmd: string, args: string[]): Promise<CommandRe
   ]);
   
   result.success = success;
+
+  // Only show output if command failed
+  if (!success) {
+    console.log("$", [cmd, ...args].join(" "));
+    if (result.stdout) console.log(result.stdout);
+    if (result.stderr) console.error(result.stderr);
+  }
+
   return result;
 } 

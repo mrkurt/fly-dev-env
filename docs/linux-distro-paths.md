@@ -62,5 +62,4 @@ This document provides detailed path information for each supported distribution
 - Logs and cache files may be automatically rotated or cleared by system tools, so persistent binding strategies should account for this.
 - Network configurations, SSH keys, and machine identifiers may also require persistence based on use case.
 
-This document will be updated as needed to refine paths and configurations based on real-world usage.
-
+This document will be updated as needed to refine paths and configurations based on real-world usage. 

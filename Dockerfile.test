@@ -7,15 +7,16 @@ RUN dnf install -y \
     unzip \
     xz \
     util-linux \
+    util-linux-core \
     && dnf clean all
 
 # Create persistent state directory only - system dir will be created by overlayfs-init
 RUN mkdir -p /data/state && \
     chmod -R 777 /data/state
 
-# Copy and set up overlayfs-init
-COPY tests/image/overlayfs-init /usr/local/bin/
-RUN chmod +x /usr/local/bin/overlayfs-init
+# Copy and set up entrypoint
+COPY tests/image/entrypoint /usr/local/bin/
+RUN chmod +x /usr/local/bin/entrypoint
 
 # Install s6-overlay
 ARG S6_OVERLAY_VERSION=3.1.6.2
@@ -48,23 +49,25 @@ COPY lib/ lib/
 COPY tests/ tests/
 COPY commands/ commands/
 
-# Cache dependencies including tests
-RUN deno cache --lock=deno.lock mod.ts && \
-    deno cache --lock=deno.lock tests/migrate_test.ts
+# Cache dependencies including all test files
+RUN deno cache --lock=deno.lock mod.ts tests/**/*_test.ts
 
-# Copy s6 configuration
-COPY tests/image/s6/env/* /etc/s6/env.d/
-# Copy test-runner service to correct s6-overlay v3 path
-COPY tests/image/s6/test-runner/ /etc/s6-overlay/s6-rc.d/test-runner/
+# Set up test-runner service
+RUN mkdir -p /etc/s6-overlay/s6-rc.d/test-runner && \
+    mkdir -p /etc/s6-overlay/s6-rc.d/user/contents.d && \
+    echo "oneshot" > /etc/s6-overlay/s6-rc.d/test-runner/type && \
+    touch /etc/s6-overlay/s6-rc.d/user/contents.d/test-runner
 
-# Add test-runner to user bundle so it starts with container
-RUN mkdir -p /etc/s6-overlay/s6-rc.d/user/contents.d && \
-    touch /etc/s6-overlay/s6-rc.d/user/contents.d/test-runner && \
-    chmod +x /etc/s6-overlay/s6-rc.d/test-runner/run && \
-    chmod +x /etc/s6-overlay/s6-rc.d/test-runner/finish
+# Copy and set up test-runner service
+COPY tests/image/s6/test-runner/up /etc/s6-overlay/s6-rc.d/test-runner/
+RUN chmod +x /etc/s6-overlay/s6-rc.d/test-runner/up
 
-# Add type file to indicate this is a longrun service
-RUN echo "longrun" > /etc/s6-overlay/s6-rc.d/test-runner/type
+# Disable legacy services and configure s6
+ENV S6_BEHAVIOUR_IF_STAGE2_FAILS=0 \
+    S6_DISABLE_LEGACY=1 \
+    S6_LOGGING=0 \
+    S6_VERBOSITY=1
 
 # Set up s6 init
-ENTRYPOINT ["/usr/local/bin/overlayfs-init", "/init"] 
+ENTRYPOINT ["/usr/local/bin/entrypoint"]
+CMD ["/init"]

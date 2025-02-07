@@ -4,15 +4,15 @@
  * Build a test container image
  */
 export async function buildTestContainer(name: string): Promise<void> {
-  // Convert name to lowercase and remove any invalid characters for Docker tags
-  const imageName = name.toLowerCase().replace(/[^a-z0-9-]/g, "-");
+  // Hardcode image name for consistency
+  const imageName = "system-migrate-test";
 
   console.log(`Building test container ${name}...`);
   
   const buildCmd = new Deno.Command("docker", {
     args: [
       "build",
-      "-t", `${imageName}-test:latest`,
+      "-t", `${imageName}:latest`,
       "-f", "Dockerfile.test",
       ".",
     ],
