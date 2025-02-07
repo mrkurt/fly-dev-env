@@ -4,6 +4,7 @@ import { ensureDir, exists } from "@std/fs";
 
 // Configuration paths
 const MIGRATIONS_DIR = "/data/system/migrations";
+const ROLLBACKS_DIR = join(MIGRATIONS_DIR, "rollbacks");
 const METADATA_FILE = join(MIGRATIONS_DIR, "metadata.json");
 const LOCK_DIR = "/data/system/lock";
 const LOCK_FILE = join(LOCK_DIR, "migrate.lock");
@@ -11,10 +12,12 @@ const LOCK_FILE = join(LOCK_DIR, "migrate.lock");
 interface Migration {
   timestamp: string;
   name: string;
-  status: "pending" | "applied" | "failed";
+  status: "pending" | "applied" | "failed" | "rolledback";
   appliedAt?: string;
   failedAt?: string;
+  rolledBackAt?: string;
   error?: string;
+  rollbackReason?: string;
 }
 
 interface MigrationMetadata {
@@ -111,6 +114,40 @@ async function storeMigrationDetails(ctx: MigrationContext, args: string[], flag
         console.warn(`Warning: Failed to store ${name} script: ${error instanceof Error ? error.message : String(error)}`);
       }
     }
+  }
+}
+
+/**
+ * Move a migration to the rollbacks directory and update its status
+ */
+async function moveToRollbacks(ctx: MigrationContext, reason: string): Promise<void> {
+  // Ensure rollbacks directory exists
+  await ensureDir(ROLLBACKS_DIR);
+
+  // Get the migration name from the directory
+  const migrationName = ctx.migrationDir.split("/").pop();
+  if (!migrationName) {
+    throw new Error("Invalid migration directory path");
+  }
+
+  // Create rollback directory
+  const rollbackDir = join(ROLLBACKS_DIR, migrationName);
+
+  // Move the migration directory to rollbacks
+  try {
+    await Deno.rename(ctx.migrationDir, rollbackDir);
+  } catch (error) {
+    console.warn(`Warning: Failed to move migration to rollbacks: ${error instanceof Error ? error.message : String(error)}`);
+    return;
+  }
+
+  // Update metadata
+  const migration = ctx.metadata.migrations.find(m => m.name === ctx.label);
+  if (migration) {
+    migration.status = "rolledback";
+    migration.rolledBackAt = new Date().toISOString();
+    migration.rollbackReason = reason;
+    await saveMigrationMetadata(ctx.metadata);
   }
 }
 
@@ -242,6 +279,11 @@ export async function systemMigrate(args: string[]) {
       // Install phase
       console.log(`Running install script for ${flags.name}...`);
       if (!await executeScript(ctx, flags.install, "install")) {
+        if (flags.rollback) {
+          console.log("Install script failed, executing rollback...");
+          await executeScript(ctx, flags.rollback, "rollback");
+          await moveToRollbacks(ctx, "Install script failed");
+        }
         throw new Error("Install script failed");
       }
 
@@ -251,6 +293,7 @@ export async function systemMigrate(args: string[]) {
         if (flags.rollback) {
           console.log("Run script failed, executing rollback...");
           await executeScript(ctx, flags.rollback, "rollback");
+          await moveToRollbacks(ctx, "Run script failed");
         }
         throw new Error("Run script failed");
       }
@@ -262,6 +305,7 @@ export async function systemMigrate(args: string[]) {
           if (flags.rollback) {
             console.log("Ready check failed, executing rollback...");
             await executeScript(ctx, flags.rollback, "rollback");
+            await moveToRollbacks(ctx, "Ready check failed");
           }
           throw new Error("Ready check failed");
         }
@@ -277,7 +321,7 @@ export async function systemMigrate(args: string[]) {
       }
 
       console.log(`Migration ${flags.name} completed successfully`);
-    } catch (error: unknown) {
+    } catch (error) {
       // Ensure migration is marked as failed in metadata
       const migration = ctx.metadata.migrations.find(m => m.name === ctx.label);
       if (migration) {
