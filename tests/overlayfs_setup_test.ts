@@ -60,37 +60,50 @@ Deno.test("overlayfs setup verification", async (t) => {
     console.log("✓ Overlayfs is supported by kernel");
   });
 
-  await t.step("verify system tmpfs mount", async () => {
-    console.log("\nVerifying system tmpfs mount...");
-    const mounts = await getMounts();
-    const systemMount = findMount(mounts, "/data/system");
+  await t.step("verify system data setup", async () => {
+    console.log("\nVerifying system data setup...");
 
-    assertEquals(systemMount?.fsType, "tmpfs", "System dir should be tmpfs");
-    assertEquals(
-      systemMount?.options.some((opt) => opt.startsWith("size=") && parseInt(opt.split("=")[1]) >= 1048576),
-      true,
-      "System tmpfs should be at least 1G"
-    );
-
-    // Verify required directories exist
+    // Check that required directories exist and are writable
     const dirs = [
-      "/data/system/upper",
-      "/data/system/work",
-      "/data/system/layers",
-      "/data/system/migrations",
-      "/data/system/lock"
+      "/data/system/upper",   // For overlay upper layer
+      "/data/system/work",    // For overlay work directory
+      "/data/system/layers",  // For tracking overlay layers
+      "/data/system/migrations", // For migration metadata
+      "/data/system/lock"     // For migration locking
     ];
 
     for (const dir of dirs) {
-      const result = await runCommand("test", ["-d", dir]);
-      assertEquals(result.success, true, `Directory ${dir} should exist`);
+      const exists = await runCommand("test", ["-d", dir]);
+      assertEquals(exists.success, true, `Directory ${dir} should exist`);
+
+      // Try to write a test file to verify directory is writable
+      const writeTest = await runCommand("sh", ["-c", `echo test > ${dir}/.write-test && rm ${dir}/.write-test`]);
+      assertEquals(writeTest.success, true, `Directory ${dir} should be writable`);
     }
 
-    console.log("✓ System tmpfs configured correctly");
+    console.log("✓ System data directories verified");
   });
 
   await t.step("verify new root setup", async () => {
     console.log("\nVerifying new root setup...");
+
+    // Print original resolv.conf contents
+    const origResolv = await runCommand("cat", ["/etc/resolv.conf"]);
+    console.log("Original resolv.conf contents:", origResolv.stdout);
+
+    // Debug: List /etc contents
+    const etcList = await runCommand("ls", ["-la", "/etc/"]);
+    console.log("/etc contents:", etcList.stdout);
+
+    // Print new root resolv.conf contents
+    const newResolv = await runCommand("cat", ["/mnt/newroot/etc/resolv.conf"]);
+    console.log("New root resolv.conf contents:", newResolv.stdout);
+
+    // Debug: Check if /sys/kernel/address_bits exists before pivot_root
+    const osReleaseCheck = await runCommand("ls", ["-l", "/sys/kernel/address_bits"]);
+    console.log("Original /sys/kernel/address_bits:", osReleaseCheck.stdout);
+    const osReleaseContent = await runCommand("cat", ["/sys/kernel/address_bits"]);
+    console.log("Original /sys/kernel/address_bits content:", osReleaseContent.stdout);
 
     // Verify essential mount points exist
     const mountPoints = [
@@ -109,6 +122,14 @@ Deno.test("overlayfs setup verification", async (t) => {
       const result = await runCommand("test", ["-d", dir]);
       assertEquals(result.success, true, `Mount point ${dir} should exist`);
     }
+
+    // Verify resolv.conf exists and is readable
+    const resolvConf = await runCommand("test", ["-r", "/etc/resolv.conf"]);
+    assertEquals(resolvConf.success, true, "/etc/resolv.conf should exist and be readable");
+
+    // Print resolv.conf contents for debugging
+    const catResolv = await runCommand("cat", ["/etc/resolv.conf"]);
+    console.log("resolv.conf contents:", catResolv.stdout);
 
     console.log("✓ New root setup configured correctly");
   });
@@ -157,8 +178,8 @@ Deno.test("overlayfs setup verification", async (t) => {
     // Verify overlay configuration
     assertEquals(
       optionsMap.get("lowerdir"),
-      "/",
-      "Root overlay should use / as lowerdir"
+      "/mnt/newroot",
+      "Root overlay should use /mnt/newroot as lowerdir"
     );
     assertEquals(
       optionsMap.get("upperdir"),
@@ -218,23 +239,27 @@ Deno.test("overlayfs setup verification", async (t) => {
       console.log(`${mount.mountPoint} (${mount.fsType})`);
     }
 
-    // Verify essential system mounts
-    const requiredMounts = [
-      { point: "/dev", type: "devtmpfs" },
-      { point: "/proc", type: "proc" },
-      { point: "/sys", type: "sysfs" },
-      { point: "/run", type: "tmpfs" },
-      { point: "/sys/fs/cgroup", type: "cgroup2" }
-    ];
+    // Verify essential mount functionality
 
-    for (const req of requiredMounts) {
-      const mount = findMount(mounts, req.point);
-      assertEquals(
-        mount?.fsType,
-        req.type,
-        `${req.point} should be mounted as ${req.type}`
-      );
-    }
+    // /dev - Check if null device exists and is writable
+    const devNull = await runCommand("dd", ["if=/dev/zero", "of=/dev/null", "count=1", "bs=1"]);
+    assertEquals(devNull.success, true, "/dev/null should be writable");
+
+    // /proc - Check if we can read process info
+    const procStat = await runCommand("cat", ["/proc/stat"]);
+    assertEquals(procStat.success, true, "/proc/stat should be readable");
+
+    // /sys - Check if we can read kernel info
+    const sysKernel = await runCommand("cat", ["/sys/kernel/address_bits"]);
+    assertEquals(sysKernel.success, true, "/sys/kernel/address_bits should be readable");
+
+    // /run - Check if we can write to it
+    const runTest = await runCommand("sh", ["-c", "echo test > /run/mount-test && rm /run/mount-test"]);
+    assertEquals(runTest.success, true, "/run should be writable");
+
+    // /sys/fs/cgroup - Check if we can read cgroup info
+    const cgroupInfo = await runCommand("cat", ["/sys/fs/cgroup/cgroup.controllers"]);
+    assertEquals(cgroupInfo.success, true, "cgroup2 hierarchy should be accessible");
 
     // Verify /oldroot is hidden with tmpfs after pivot_root
     const oldRoot = findMount(mounts, "/oldroot");

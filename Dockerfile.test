@@ -10,10 +10,6 @@ RUN dnf install -y \
     util-linux-core \
     && dnf clean all
 
-# Create persistent state directory only - system dir will be created by overlayfs-init
-RUN mkdir -p /data/state && \
-    chmod -R 777 /data/state
-
 # Copy and set up entrypoint
 COPY tests/image/entrypoint /usr/local/bin/
 RUN chmod +x /usr/local/bin/entrypoint
@@ -66,7 +62,8 @@ RUN chmod +x /etc/s6-overlay/s6-rc.d/test-runner/up
 ENV S6_BEHAVIOUR_IF_STAGE2_FAILS=0 \
     S6_DISABLE_LEGACY=1 \
     S6_LOGGING=0 \
-    S6_VERBOSITY=1
+    S6_VERBOSITY=1 \
+    S6_CMD_WAIT_FOR_SERVICES_MAXTIME=0
 
 # Set up s6 init
 ENTRYPOINT ["/usr/local/bin/entrypoint"]

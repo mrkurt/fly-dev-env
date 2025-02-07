@@ -1,5 +1,6 @@
 #!/usr/bin/env -S deno run --allow-run
 
+import { parseArgs } from "@std/cli";
 import { buildTestContainer } from "./build.ts";
 
 interface RunOptions {
@@ -64,4 +65,4 @@ if (import.meta.main) {
   }
 
   await runTestContainer(name, cmd.length > 0 ? cmd : undefined, { shouldBuild });
-} 
+}
