@@ -2,13 +2,34 @@ import { parseArgs } from "@std/cli";
 import { join } from "@std/path";
 import { ensureDir, exists } from "@std/fs";
 
-// Configuration paths
+// Migration system for Fly.io development environments
+//
+// This system manages system-level changes that need to be tracked and potentially rolled back.
+// Unlike traditional database migrations, these handle low-level system changes like:
+// - Installing system packages
+// - Setting up system services
+// - Configuring system files and permissions
+// - Managing system users and groups
+//
+// Key design decisions:
+// 1. Migrations are atomic - they either fully succeed or get rolled back
+// 2. Only one migration can run at a time (uses filesystem locking)
+// 3. Failed migrations are moved to a rollbacks directory for visibility
+// 4. All scripts and outputs are preserved for debugging
+// 5. Uses overlayfs, so changes can be tested before committing
+
+// Configuration paths - all under /data/system for overlay persistence
 const MIGRATIONS_DIR = "/data/system/migrations";
 const ROLLBACKS_DIR = join(MIGRATIONS_DIR, "rollbacks");
 const METADATA_FILE = join(MIGRATIONS_DIR, "metadata.json");
 const LOCK_DIR = "/data/system/lock";
 const LOCK_FILE = join(LOCK_DIR, "migrate.lock");
 
+// Migration status tracks the lifecycle of a migration:
+// - pending: Initial state when created
+// - applied: Successfully completed all phases
+// - failed: One of the phases failed
+// - rolledback: Failed and rollback completed
 interface Migration {
   timestamp: string;
   name: string;
@@ -20,11 +41,15 @@ interface Migration {
   rollbackReason?: string;
 }
 
+// Metadata tracks all migrations and their current state
+// lastApplied helps determine migration order and dependencies
 interface MigrationMetadata {
   migrations: Migration[];
   lastApplied?: string;
 }
 
+// Context passed through the migration process
+// Contains all state needed to track and manage the migration
 interface MigrationContext {
   timestamp: string;
   label: string;
@@ -81,7 +106,13 @@ async function setupMigrationContext(label: string): Promise<MigrationContext> {
 }
 
 /**
- * Store the original command arguments and script contents
+ * Store migration details for debugging and auditing
+ *
+ * We store both the original command arguments and script contents because:
+ * 1. Original commands help reproduce issues
+ * 2. Script contents may change in source control
+ * 3. Helps debug issues when source files are unavailable
+ * 4. Provides complete picture of what was attempted
  */
 async function storeMigrationDetails(ctx: MigrationContext, args: string[], flags: Record<string, unknown>): Promise<void> {
   // Store original command arguments
@@ -118,7 +149,15 @@ async function storeMigrationDetails(ctx: MigrationContext, args: string[], flag
 }
 
 /**
- * Move a migration to the rollbacks directory and update its status
+ * Move failed migrations to a dedicated rollbacks directory
+ *
+ * This serves several purposes:
+ * 1. Makes failed migrations visible to operators
+ * 2. Keeps successful migrations clean
+ * 3. Preserves all logs and context for debugging
+ * 4. Helps track patterns in failures
+ *
+ * The rollback directory structure mirrors the main migrations directory
  */
 async function moveToRollbacks(ctx: MigrationContext, reason: string): Promise<void> {
   // Ensure rollbacks directory exists
@@ -151,6 +190,16 @@ async function moveToRollbacks(ctx: MigrationContext, reason: string): Promise<v
   }
 }
 
+/**
+ * Execute a migration script and capture its output
+ *
+ * Each script runs in a clean environment and:
+ * 1. Has its output captured and preserved
+ * 2. Updates migration status on failure
+ * 3. Triggers rollback if available
+ *
+ * Scripts should be idempotent since they may be retried
+ */
 async function executeScript(ctx: MigrationContext, scriptPath: string, phase: string): Promise<boolean> {
   // Run the script and capture its output
   const result = await new Deno.Command(scriptPath, {
@@ -180,8 +229,15 @@ async function executeScript(ctx: MigrationContext, scriptPath: string, phase: s
 }
 
 /**
- * Acquire a lock for migration
- * @throws Error if lock cannot be acquired
+ * Acquire an exclusive lock for migrations
+ *
+ * The lock prevents concurrent migrations which could:
+ * 1. Corrupt the overlay filesystem
+ * 2. Interfere with system package managers
+ * 3. Create race conditions in system changes
+ *
+ * Lock files include PID and timestamp for debugging
+ * Stale locks (dead PIDs) are automatically cleaned up
  */
 async function acquireLock(): Promise<void> {
   await ensureDir(LOCK_DIR);

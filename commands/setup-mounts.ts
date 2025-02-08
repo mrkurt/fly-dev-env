@@ -1,12 +1,30 @@
 import { runCommand } from "../tests/helpers/cmd.ts";
 
-// Configuration constants
+// Mount setup system for Fly.io development environments
+//
+// This system creates a layered filesystem environment that:
+// 1. Provides a writable layer over the read-only base system
+// 2. Preserves state across container restarts
+// 3. Isolates system changes for testing
+// 4. Supports rolling back changes
+//
+// The mount hierarchy is:
+// - overlayfs at / (lowerdir=base system, upperdir=/data/system/upper)
+// - tmpfs at /data (for persistent state)
+// - bind mounts for essential system directories
+// - state directories for preserving data
+
+// Configuration constants - paths are chosen to be clear and consistent
 const SYSTEM_DIR = "/data/system";
 const SYSTEM_SIZE = "1G";
 const NEW_ROOT = "/mnt/newroot";
 const STATE_DIR = "/data/state";
 
-// State directories that need to be persisted
+// Paths that need to persist across container restarts
+// Each entry defines:
+// - source: Original path in the container
+// - target: Path under /data/state
+// - mode: Permissions for the state directory
 const STATE_PATHS = [
   {
     source: "/home",
@@ -29,7 +47,13 @@ interface MountError extends Error {
 
 /**
  * Sets up a state directory with content copying
- * This ensures any existing files are preserved when we mount the state directory
+ *
+ * State directories persist data across container restarts.
+ * We copy existing content because:
+ * 1. Preserves default files and permissions
+ * 2. Handles first-time setup automatically
+ * 3. Updates state with new package versions
+ * 4. Maintains consistent state directory structure
  */
 async function setupStateDirectory(statePath: { source: string; target: string; mode: string }): Promise<void> {
   const fullStatePath = `${STATE_DIR}/${statePath.target}`;
@@ -115,7 +139,14 @@ async function setupStateDirectory(statePath: { source: string; target: string; 
 
 /**
  * Sets up system data tmpfs and directories
- * This is the first mount we need - it provides the writable layer for our overlay
+ *
+ * The system data area provides:
+ * 1. Writable space for overlayfs
+ * 2. Migration tracking and metadata
+ * 3. Lock files for concurrency control
+ * 4. Layer tracking for the overlay
+ *
+ * Using tmpfs ensures clean state on container start
  */
 async function setupSystemData(): Promise<void> {
   console.log("Setting up system data...");
@@ -159,7 +190,12 @@ async function setupSystemData(): Promise<void> {
 
 /**
  * Detects if a mount point's source device is accessible
- * Returns true if the device is private/inaccessible
+ *
+ * Docker creates special mounts for some files (/etc/resolv.conf, etc)
+ * that are inaccessible from the container. We need to:
+ * 1. Detect these special mounts
+ * 2. Copy their contents instead of bind mounting
+ * 3. Preserve the special file handling
  */
 async function isPrivateMount(mountPath: string): Promise<boolean> {
   // Get device info for this mount
@@ -249,6 +285,12 @@ async function copyIfPrivateMount(path: string, destPath: string): Promise<boole
 
 /**
  * Creates new root directory and essential mount points
+ *
+ * The new root setup:
+ * 1. Creates a clean mount namespace
+ * 2. Preserves essential system mounts
+ * 3. Handles Docker's special files
+ * 4. Prepares for overlayfs setup
  */
 async function setupNewRoot(): Promise<void> {
   console.log("Setting up new root directory...");
@@ -372,6 +414,12 @@ async function setupNewRoot(): Promise<void> {
 
 /**
  * Sets up the overlay filesystem on the new root
+ *
+ * The overlay provides:
+ * 1. A writable layer over the read-only base
+ * 2. Isolation of system changes
+ * 3. Ability to test changes before committing
+ * 4. Support for rolling back changes
  */
 async function setupOverlay(): Promise<void> {
   console.log("Setting up overlay filesystem...");
@@ -447,6 +495,12 @@ async function setupOverlay(): Promise<void> {
 
 /**
  * Sets up essential system mounts in the new root
+ *
+ * System mounts are handled carefully to:
+ * 1. Preserve necessary kernel interfaces
+ * 2. Prevent mount propagation back to host
+ * 3. Handle Docker's special cases
+ * 4. Maintain security boundaries
  */
 async function setupSystemMounts(): Promise<void> {
   console.log("Setting up system mounts...");
@@ -551,6 +605,12 @@ async function setupSystemMounts(): Promise<void> {
 
 /**
  * Switch to the new root filesystem using pivot_root
+ *
+ * pivot_root is used instead of chroot because:
+ * 1. It completely detaches from the old root
+ * 2. Prevents leaking file descriptors
+ * 3. Properly handles mount namespaces
+ * 4. Required for systemd compatibility
  */
 async function pivotRoot(): Promise<void> {
   console.log("Switching root filesystem...");
@@ -568,7 +628,12 @@ async function pivotRoot(): Promise<void> {
 
 /**
  * Hide the old root filesystem by mounting tmpfs over it
- * This prevents systemd from scanning the old root
+ *
+ * We hide the old root to:
+ * 1. Prevent systemd from scanning it
+ * 2. Avoid resource conflicts
+ * 3. Maintain clean mount namespace
+ * 4. Reduce memory usage
  */
 async function hideOldRoot(): Promise<void> {
   console.log("Hiding old root filesystem...");

@@ -9,7 +9,6 @@
     "dev": "deno run --watch -A mod.ts"
   },
   "imports": {
-    "$lib/": "./lib/",
     "$tests/": "./tests/",
     "$commands/": "./commands/",
     "@std/assert": "jsr:@std/assert@^1.0.11",

@@ -41,7 +41,6 @@ WORKDIR /app
 # Copy all Deno files first
 COPY deno.json deno.lock ./
 COPY mod.ts ./
-COPY lib/ lib/
 COPY tests/ tests/
 COPY commands/ commands/
 
